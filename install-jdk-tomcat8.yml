@@ -1,0 +1,78 @@
+---
+- hosts: Tomcat-8
+  remote_user: s_ansible
+  become: yes
+  vars:
+    java_version: "8u121"
+    download_url: http://download.oracle.com/otn-pub/java/jdk/8u121-b13/e9e7ea248e2c4826b92b3f075a80e441/jdk-8u121-linux-x64.tar.gz
+    download_folder: /opt
+    java_name: "{{download_folder}}/jdk1.8.0_121"
+    java_archive: "{{download_folder}}/jdk-8u121-linux-x64.tar.gz"
+    java_certs: "{{java_name}}/jre/lib/security/cacerts"
+  environment:
+    http_proxy: http://proxy.dpf.gov.br:3128
+    https_proxy: http://proxy.dpf.gov.br:3128
+    ftp_proxy: http://proxy.dpf.gov.br:3128
+
+  tasks:
+  - name: Download Oracle JDK
+    get_url: url={{download_url}} dest={{download_folder}} headers='Cookie:gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie'
+
+  - name: remove the instalations JDK package
+    yum: name=java-* state=removed
+
+  - name: Unpack archive
+    command: "tar -zxf {{java_archive}} -C {{download_folder}} creates={{java_name}}"
+
+  - name: Fix ownership
+    file: state=directory path={{java_name}} owner=root group=root recurse=yes
+
+  - name: Make Java available for system
+    command: 'alternatives --install "/usr/bin/java" "java" "{{java_name}}/bin/java" 2000'
+
+  - name: Clean up
+    file: state=absent path={{java_archive}}
+
+  - name: change environments Java
+    replace: dest=/etc/profile regexp='_51' replace='_121'
+
+#  - name: change environments Wildfly
+    #replace: dest=/opt/wildfly/bin/wildfly.sh regexp='_51' replace='_121'
+#    replace: dest=/opt/wildfly/bin/wildfly.sh regexp='JAVA_HOME=' replace='#JAVA_HOME='
+
+  - name: source profile
+    shell: source /etc/profile
+
+  - name: copy certs
+    become: no
+    synchronize: src=certs dest=/tmp
+
+  - name: install certs on JDK
+    shell: /opt/jdk1.8.0_121/bin/keytool -import -trustcacerts -keystore {{java_certs}} -storepass changeit -noprompt -alias {{item.alias}} -file {{item.cert}}
+    with_items:
+    - { alias: 'PF-CA_2012-2017', cert: '/tmp/certs/PF-CA_2012-2017.crt' }
+    - { alias: 'PF-CA_2017-2055', cert: '/tmp/certs/PF-CA_2017-2055.crt' }
+    - { alias: 'LetsEncrypt', cert: '/tmp/certs/full-chain-letsencrypt.crt' }
+    - { alias: 'SerproFinalv4', cert: '/tmp/certs/Autoridade_Certificadora_do_Serpro_Final_v4.crt' }
+    - { alias: 'Serprov2', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v2.crt' }
+    - { alias: 'Serprov3', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v3.crt' }
+    - { alias: 'Serprov4', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v4.crt' }
+    - { alias: 'ICP-Brasil_AC_Raiz_v1', cert: '/tmp/certs/ICP-Brasil_AC_Raiz_v1.crt' }
+    - { alias: 'ICP-Brasilv2', cert: '/tmp/certs/ICP-Brasilv2.crt' }
+    - { alias: 'ICP-Brasilv5', cert: '/tmp/certs/ICP-Brasilv5.crt' }
+    ignore_errors: true
+
+#  - name: Restart Wildfly
+#    service: name=wildfly state=restarted
+
+  - name: Check old versions JDK
+    shell: ls /opt/ | grep jdk1.8 | grep -v jdk1.8.0_121
+    register: contents
+    ignore_errors: true
+
+  - name: Clean up JDK
+    file: path=/opt/{{ item }} state=absent
+    with_items: "{{ contents.stdout_lines }}"
+
+  - name: Clean up CERTs
+    file: path=/tmp/certs state=absent

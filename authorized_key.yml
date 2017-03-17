@@ -1,0 +1,8 @@
+---
+- hosts: JbossAS_5
+  user: s_ansible
+  become: yes
+
+  tasks:
+  - name: Set authorized key took from file
+    authorized_key: user=s_ansible state=present key="{{ lookup('file', '/home/s_ansible/.ssh/id_rsa.pub') }}"
