@@ -1,5 +1,5 @@
 ---
-- hosts: sdf0438
+- hosts: host
   remote_user: s_ansible
   become: yes
   vars:
@@ -15,12 +15,7 @@
     download_keycloak_adapter: https://downloads.jboss.org/keycloak/2.1.0.Final/adapters/keycloak-oidc/keycloak-wildfly-adapter-dist-2.1.0.Final.zip
     keycloak_adapter_version: "2.1.0.Final"
     jboss_home: /opt/wildfly
-
-  environment:
-    http_proxy: http://proxy.dpf.gov.br:3128
-    https_proxy: http://proxy.dpf.gov.br:3128
-    ftp_proxy: http://proxy.dpf.gov.br:3128
-
+    
   tasks:
   - name: Create any groups that the wildfly user should belong to
     group: name=wildfly gid=299 state=present
