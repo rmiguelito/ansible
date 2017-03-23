@@ -9,10 +9,6 @@
     java_name: "{{download_folder}}/jdk1.8.0_121"
     java_archive: "{{download_folder}}/jdk-8u121-linux-x64.tar.gz"
     java_certs: "{{java_name}}/jre/lib/security/cacerts"
-  environment:
-    http_proxy: http://proxy.dpf.gov.br:3128
-    https_proxy: http://proxy.dpf.gov.br:3128
-    ftp_proxy: http://proxy.dpf.gov.br:3128
 
   tasks:
   - name: Download Oracle JDK
@@ -50,8 +46,6 @@
   - name: install certs on JDK
     shell: /opt/jdk1.8.0_121/bin/keytool -import -trustcacerts -keystore {{java_certs}} -storepass changeit -noprompt -alias {{item.alias}} -file {{item.cert}}
     with_items:
-    - { alias: 'PF-CA_2012-2017', cert: '/tmp/certs/PF-CA_2012-2017.crt' }
-    - { alias: 'PF-CA_2017-2055', cert: '/tmp/certs/PF-CA_2017-2055.crt' }
     - { alias: 'LetsEncrypt', cert: '/tmp/certs/full-chain-letsencrypt.crt' }
     - { alias: 'SerproFinalv4', cert: '/tmp/certs/Autoridade_Certificadora_do_Serpro_Final_v4.crt' }
     - { alias: 'Serprov2', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v2.crt' }
