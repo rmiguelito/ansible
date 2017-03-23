@@ -1,5 +1,5 @@
 ---
-- hosts: sdf0438
+- hosts: host
   remote_user: s_ansible
   become: yes
   vars:
