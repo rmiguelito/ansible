@@ -1,0 +1,5 @@
+embed-host-controller --domain-config=domain.xml
+/profile=default/subsystem=security/security-domain=keycloak/:add
+/profile=default/subsystem=security/security-domain=keycloak/authentication=classic/:add(login-modules=[{ "code" => "org.keycloak.adapters.jboss.KeycloakLoginModule","flag" => "required"}])
+/extension=org.keycloak.keycloak-adapter-subsystem/:add(module=org.keycloak.keycloak-adapter-subsystem)
+/profile=default/subsystem=keycloak:add

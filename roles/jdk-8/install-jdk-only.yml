@@ -1,0 +1,90 @@
+---
+- hosts: all
+#  remote_user: s_ansible
+  become: yes
+  vars:
+    java_version: "8u121"
+    download_url: http://download.oracle.com/otn-pub/java/jdk/8u121-b13/e9e7ea248e2c4826b92b3f075a80e441/jdk-{{java_version}}-linux-x64.tar.gz
+    download_folder: /opt
+    java_name: "{{download_folder}}/jdk1.8.0_121"
+    java_archive: "{{download_folder}}/jdk-8u121-linux-x64.tar.gz"
+    java_certs: "{{java_name}}/jre/lib/security/cacerts"
+    wildfly_version: "10.0.0.Final"
+    download_wildfly: http://download.jboss.org/wildfly/10.0.0.Final/wildfly-10.0.0.Final.zip
+    download_keycloak_adapter: https://downloads.jboss.org/keycloak/2.1.0.Final/adapters/keycloak-oidc/keycloak-wildfly-adapter-dist-2.1.0.Final.zip
+    keycloak_adapter_version: "2.1.0.Final"
+    jboss_home: /opt/wildfly
+
+  environment:
+    http_proxy: 
+    https_proxy:
+    ftp_proxy: 
+
+  tasks:
+  - name: Download Oracle JDK
+    get_url: url={{download_url}} dest={{download_folder}} headers='Cookie:gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie'
+
+  - name: remove the instalations JDK package
+    yum: name=java-* state=removed
+
+  - name: Unpack archive
+    command: "tar -zxf {{java_archive}} -C {{download_folder}} creates={{java_name}}"
+
+  - name: Fix ownership
+    file: state=directory path={{java_name}} owner=root group=root recurse=yes
+
+  - name: Make Java available for system
+    command: 'alternatives --install "/usr/bin/java" "java" "{{java_name}}/bin/java" 2000'
+
+  - name: Clean up
+    file: state=absent path={{java_archive}}
+
+  - name: source profile
+    shell: source /etc/profile
+
+  - name: copy certs
+    become: no
+    synchronize: src=certs dest=/tmp
+
+  - name: install certs on JDK
+    shell: /opt/jdk1.8.0_121/bin/keytool -import -trustcacerts -keystore {{java_certs}} -storepass changeit -noprompt -alias {{item.alias}} -file {{item.cert}}
+    with_items:
+    - { alias: 'LetsEncrypt', cert: '/tmp/certs/full-chain-letsencrypt.crt' }
+    - { alias: 'SerproFinalv4', cert: '/tmp/certs/Autoridade_Certificadora_do_Serpro_Final_v4.crt' }
+    - { alias: 'Serprov2', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v2.crt' }
+    - { alias: 'Serprov3', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v3.crt' }
+    - { alias: 'Serprov4', cert: '/tmp/certs/Autoridade_Certificadora_Serpro_v4.crt' }
+    - { alias: 'ICP-Brasil_AC_Raiz_v1', cert: '/tmp/certs/ICP-Brasil_AC_Raiz_v1.crt' }
+    - { alias: 'ICP-Brasilv2', cert: '/tmp/certs/ICP-Brasilv2.crt' }
+    - { alias: 'ICP-Brasilv5', cert: '/tmp/certs/ICP-Brasilv5.crt' }
+    ignore_errors: true
+
+  - name: Check old versions JDK
+    shell: ls /opt/ | grep jdk1.8 | grep -v jdk1.8.0_121
+    register: contents
+    ignore_errors: true
+
+  - name: Clean up JDK
+    file: path=/opt/{{ item }} state=absent
+    with_items: "{{ contents.stdout_lines }}"
+
+  - name: Clean up CERTs
+    file: path=/tmp/certs state=absent
+
+  - name: Create any groups that the wildfly user should belong to
+    group: name=wildfly state=present
+
+  - name: Create wildfly user if missing
+    user: name=wildfly createhome=no system=yes uid=299 state=present group=wildfly
+
+  - name: Download Wildfly 
+    get_url: url={{download_wildfly}} dest={{download_folder}}
+
+  - name: Download Keycloak Adapter
+    get_url: url={{download_keycloak_adapter}} dest={{jboss_home}}
+
+  - name: Unpack archive
+    unarchive: src={{download_folder}}/wildfly-{{wildfly_version}}.zip dest={{download_folder}} copy=no
+
+  - name: "Cria link simbolico para o WildFly"
+    shell: /opt/wildfly{{wildfly_version}} ln -s /opt/wildfly

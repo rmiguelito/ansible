@@ -1,0 +1,94 @@
+---
+- hosts: localhost
+  become: yes
+  vars:
+    download_folder: /opt
+    wildfly_version: "10.0.0.Final"
+    download_wildfly: http://download.jboss.org/wildfly/10.0.0.Final/wildfly-10.0.0.Final.zip
+    archive_wildfly: "{{download_folder}}/wildfly-10.0.0.Final.zip"
+    download_keycloak_adapter: https://downloads.jboss.org/keycloak/2.1.0.Final/adapters/keycloak-oidc/keycloak-wildfly-adapter-dist-2.1.0.Final.zip
+    keycloak_adapter_version: "2.1.0.Final"
+    jboss_home: /opt/wildfly
+  tasks:
+  - name: Create any groups that the wildfly user should belong to
+    group: name=wildfly gid=299 state=present
+
+  - name: Create wildfly user if missing
+    user: name=wildfly createhome=no system=yes uid=299 state=present group=wildfly
+
+  - name: Be sure download_wildfly no exists
+    stat: path={{download_folder}}/wildfly-{{wildfly_version}}.zip
+    register: wildfly_down_dir
+
+  - name: Download Wildfly
+    get_url: url={{download_wildfly}} dest={{download_folder}}
+    when: not wildfly_down_dir.stat.exists
+
+  - name: Be sure directory wildfly no exists
+    stat: path={{download_folder}}/wildfly-{{wildfly_version}}
+    register: wildfly_data_dir
+
+  - name: Unpack archive
+    unarchive: src={{download_folder}}/wildfly-{{wildfly_version}}.zip dest={{download_folder}} copy=no owner=wildfly group=wildfly
+    when: not wildfly_data_dir.stat.exists
+
+  - name: Cria link simbolico para o WildFly
+    file: src=/opt/wildfly-{{wildfly_version}} dest={{jboss_home}} owner=wildfly group=wildfly state=link
+
+  - name: Be sure directory Keycloak adapter no exists
+    stat: path={{jboss_home}}/keycloak-wildfly-adapter-dist-{{keycloak_adapter_version}}.zip
+    register: keycloak_down_dir
+
+  - name: Download Keycloak Adapter
+    get_url: url={{download_keycloak_adapter}} dest={{jboss_home}}
+    when: not keycloak_down_dir.stat.exists
+
+  - name: Unpack archive adapter keycloak
+    unarchive: src={{jboss_home}}/keycloak-wildfly-adapter-dist-{{keycloak_adapter_version}}.zip dest={{jboss_home}} copy=no owner=wildfly group=wildfly
+    when: keycloak_down_dir.stat.exists
+
+  - name: copy keycloak adapter and drivers JDBC
+    copy: src={{item.origem}} dest={{item.destino}} owner=wildfly group=wildfly
+    with_items:
+    - { origem: 'adapter-install-offline.cli', destino: '/tmp' }
+    - { origem: 'postgresql', destino: '/opt/wildfly/modules/system/layers/base/org' }
+    - { origem: 'oracle', destino: '/opt/wildfly/modules/system/layers/base/com' }
+
+
+  - name: install keycloak adapter
+    command: /opt/wildfly/bin/jboss-cli.sh --file=/tmp/adapter-install-offline.cli
+    ignore_errors: true
+
+  - name: create user admin jboss and jenkins mgmt
+    shell: echo '{{item}}' >> {{jboss_home}}/domain/configuration/mgmt-users.properties
+    with_items:
+    - 'admin=2ed16248fbf0a8703adcd9f3dd181c39'
+    - 'jenkins=997a8ca3e7b01b0cbe7453037010391f'
+
+  - name: create path logs and pid
+    file: path={{ item }} state=directory owner=wildfly group=wildfly
+    with_items:
+    - /var/log/wildfly
+    - /var/run/wildfly
+
+  - name: copy wildfly script
+    copy: src=wildfly.sh dest={{jboss_home}}/bin mode=0755
+
+  - name: copy wildfly systemd
+    copy: src=wildfly.service dest=/etc/systemd/system mode=0644
+
+  - name: copy wildfly host.xml
+    copy: src=host.xml dest={{jboss_home}}/domain/configuration owner=wildfly group=wildfly
+
+#  - name: remove temp
+#    command: rm -rf /opt/wildfly/domain/configuration/host_xml_history
+#    ignore_errors: true
+
+#  - name: enable wildfly on boot
+#    service: name=wildfly enabled=yes state=started
+
+#  - name: Clean up
+#    file: state=absent path={{ item }}
+#    with_items:
+#    - "{{archive_wildfly}}"
+#    - /opt/wildfly/domain/configuration/host_xml_history
